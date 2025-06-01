@@ -72,6 +72,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       nextReview: word.nextReview,
       isFamiliar: true,
     );
+    print('Marking as familiar: original=${word.original}, isFamiliar=${updatedWord.isFamiliar}');
     _repository.updateWord(updatedWord);
     _nextCard();
   }
@@ -84,6 +85,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
         _nextReviewDate = null;
       } else {
         _wordsForReview = [];
+        _loadWords(); // Refresh the list to exclude familiar words
       }
     });
   }
@@ -127,13 +129,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
               },
               child: Text(_showTranslation ? 'Показать слово' : 'Показать перевод'),
             ),
-            if (_showTranslation) ...[
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => _markAsFamiliar(currentWord),
-                child: Text('Выучено'),
-              ),
-            ],
           ],
         ),
       ),

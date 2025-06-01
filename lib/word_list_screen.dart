@@ -19,6 +19,9 @@ class _WordListScreenState extends State<WordListScreen> {
   late Timer _timer;
   String _bishkekTime = '';
   Duration _timeOffset = Duration.zero;
+  bool _isSelectionMode = false;
+  String? _longPressedWord;
+  int _wordsForReviewCount = 0;
 
   @override
   void initState() {
@@ -26,6 +29,7 @@ class _WordListScreenState extends State<WordListScreen> {
     _wordsFuture = _repository.getWords();
     _loadTimeOffset();
     _updateBishkekTime();
+    _updateWordsForReviewCount();
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {
         _updateBishkekTime();
@@ -38,6 +42,7 @@ class _WordListScreenState extends State<WordListScreen> {
     final hours = prefs.getInt('time_offset_hours') ?? 0;
     setState(() {
       _timeOffset = Duration(hours: hours);
+      _updateWordsForReviewCount();
     });
   }
 
@@ -46,6 +51,7 @@ class _WordListScreenState extends State<WordListScreen> {
     final newOffset = _timeOffset + Duration(hours: 1);
     setState(() {
       _timeOffset = newOffset;
+      _updateWordsForReviewCount();
     });
     await prefs.setInt('time_offset_hours', newOffset.inHours);
   }
@@ -55,6 +61,14 @@ class _WordListScreenState extends State<WordListScreen> {
     await prefs.remove('time_offset_hours');
     setState(() {
       _timeOffset = Duration.zero;
+      _updateWordsForReviewCount();
+    });
+  }
+
+  Future<void> _updateWordsForReviewCount() async {
+    final words = await _repository.getWordsForReview();
+    setState(() {
+      _wordsForReviewCount = words.length;
     });
   }
 
@@ -119,9 +133,36 @@ class _WordListScreenState extends State<WordListScreen> {
               setState(() {
                 _selectedWords.remove(word.original);
                 _wordsFuture = _repository.getWords();
+                _isSelectionMode = _selectedWords.isNotEmpty;
+                _longPressedWord = null;
+                _updateWordsForReviewCount();
               });
             },
             child: Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final updatedWord = Word(
+                original: word.original,
+                translation: word.translation,
+                interval: word.interval,
+                reviewStage: word.reviewStage,
+                reviewCount: word.reviewCount,
+                nextReview: word.nextReview,
+                isFamiliar: true, // Mark as familiar
+              );
+              print('Marking as familiar in edit: original=${word.original}, isFamiliar=${updatedWord.isFamiliar}');
+              await _repository.updateWord(updatedWord);
+              Navigator.pop(context);
+              setState(() {
+                _selectedWords.remove(word.original);
+                _wordsFuture = _repository.getWords();
+                _isSelectionMode = _selectedWords.isNotEmpty;
+                _longPressedWord = null;
+                _updateWordsForReviewCount();
+              });
+            },
+            child: Text('Выучено', style: TextStyle(color: Colors.green)),
           ),
           TextButton(
             onPressed: () async {
@@ -139,6 +180,9 @@ class _WordListScreenState extends State<WordListScreen> {
                 Navigator.pop(context);
                 setState(() {
                   _wordsFuture = _repository.getWords();
+                  _isSelectionMode = _selectedWords.isNotEmpty;
+                  _longPressedWord = null;
+                  _updateWordsForReviewCount();
                 });
               }
             },
@@ -149,7 +193,7 @@ class _WordListScreenState extends State<WordListScreen> {
     );
   }
 
-  // Вычисление статуса повторения с таймером
+  // Вычисление статуса повторения
   String _getReviewStatus(Word word) {
     if (word.isFamiliar) {
       return 'Выучено';
@@ -158,7 +202,7 @@ class _WordListScreenState extends State<WordListScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final nextReviewDay = DateTime(word.nextReview.year, word.nextReview.month, word.nextReview.day);
     final difference = nextReviewDay.difference(today).inDays;
-    print('Word: ${word.original}, nextReview: ${word.nextReview}, today: $today, difference: $difference days');
+    print('Word: ${word.original}, nextReview=${word.nextReview}, today=$today, difference=$difference days');
     if (difference <= 0) {
       return 'Повторить сегодня';
     }
@@ -205,15 +249,10 @@ class _WordListScreenState extends State<WordListScreen> {
                   await _repository.addWordsForReview(_selectedWords.toList());
                   setState(() {
                     _selectedWords.clear();
+                    _isSelectionMode = false;
+                    _longPressedWord = null;
                     _wordsFuture = _repository.getWords();
-                  });
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => FlashcardScreen()),
-                  ).then((_) {
-                    setState(() {
-                      _wordsFuture = _repository.getWords();
-                    });
+                    _updateWordsForReviewCount();
                   });
                 },
                 child: Text('Добавить выбранные в карточки'),
@@ -237,7 +276,8 @@ class _WordListScreenState extends State<WordListScreen> {
                   itemBuilder: (context, index) {
                     final word = words[index];
                     return ListTile(
-                      leading: Checkbox(
+                      leading: _isSelectionMode
+                          ? Checkbox(
                         value: _selectedWords.contains(word.original),
                         onChanged: (bool? value) {
                           setState(() {
@@ -245,35 +285,53 @@ class _WordListScreenState extends State<WordListScreen> {
                               _selectedWords.add(word.original);
                             } else {
                               _selectedWords.remove(word.original);
+                              if (_selectedWords.isEmpty) {
+                                _isSelectionMode = false;
+                                _longPressedWord = null;
+                              }
                             }
                           });
                         },
-                      ),
+                      )
+                          : null,
                       title: Text(word.original),
-                      subtitle: Text('${word.translation} | ${_getReviewStatus(word)} | Повторено: ${word.reviewCount}'),
+                      subtitle: Text(word.translation),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            icon: Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _editWord(context, word),
+                          Text(
+                            _getReviewStatus(word),
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
                           ),
-                          IconButton(
-                            icon: Icon(Icons.play_circle, color: Colors.green),
-                            onPressed: () async {
-                              await _repository.addWordForReview(word.original);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => FlashcardScreen()),
-                              ).then((_) {
-                                setState(() {
-                                  _wordsFuture = _repository.getWords();
-                                });
-                              });
-                            },
-                          ),
+                          if (_isSelectionMode || _longPressedWord == word.original)
+                            IconButton(
+                              icon: Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _editWord(context, word),
+                            ),
                         ],
                       ),
+                      onLongPress: () {
+                        setState(() {
+                          _isSelectionMode = true;
+                          _longPressedWord = word.original;
+                          _selectedWords.add(word.original);
+                        });
+                      },
+                      onTap: _isSelectionMode
+                          ? () {
+                        setState(() {
+                          if (_selectedWords.contains(word.original)) {
+                            _selectedWords.remove(word.original);
+                            if (_selectedWords.isEmpty) {
+                              _isSelectionMode = false;
+                              _longPressedWord = null;
+                            }
+                          } else {
+                            _selectedWords.add(word.original);
+                          }
+                        });
+                      }
+                          : null,
                     );
                   },
                 );
@@ -285,19 +343,29 @@ class _WordListScreenState extends State<WordListScreen> {
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          FloatingActionButton(
-            heroTag: 'flashcards',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => FlashcardScreen()),
-              ).then((_) {
-                setState(() {
-                  _wordsFuture = _repository.getWords();
+          Badge(
+            isLabelVisible: _wordsForReviewCount > 0,
+            label: Text(
+              '$_wordsForReviewCount',
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            offset: Offset(10, -10),
+            child: FloatingActionButton(
+              heroTag: 'flashcards',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => FlashcardScreen()),
+                ).then((_) {
+                  setState(() {
+                    _wordsFuture = _repository.getWords();
+                    _updateWordsForReviewCount();
+                  });
                 });
-              });
-            },
-            child: Icon(Icons.play_arrow),
+              },
+              child: Icon(Icons.play_arrow),
+            ),
           ),
           SizedBox(height: 10),
           FloatingActionButton(
@@ -309,6 +377,7 @@ class _WordListScreenState extends State<WordListScreen> {
               );
               setState(() {
                 _wordsFuture = _repository.getWords();
+                _updateWordsForReviewCount();
               });
             },
             child: Icon(Icons.add),
