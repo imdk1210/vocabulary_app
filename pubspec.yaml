@@ -1,17 +1,20 @@
-name: vocabulary_app
-description: A Flutter app for learning words with flashcards
-version: 1.0.0
+name: your_app_name
+description: A new Flutter project.
+
+version: 1.0.0+1
+
 environment:
-  sdk: '>=2.18.0 <3.0.0'
+  sdk: ">=2.12.0 <3.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   shared_preferences: ^2.0.15
-  cupertino_icons: ^1.0.5
+  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
 flutter:
   uses-material-design: true

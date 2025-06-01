@@ -33,15 +33,25 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
   void _updateReview(Word word) {
     // Фиксированный график повторений: 1, 3, 7, 14, 30, 60 дней
     const intervals = [1, 3, 7, 14, 30, 60];
-    int newStage = word.reviewStage + 1;
-    int newInterval = intervals[newStage < intervals.length ? newStage : intervals.length - 1];
+    // Используем текущую стадию повторения для выбора интервала
+    int currentStage = word.reviewStage;
+    // Выбираем интервал, не превышая длину массива
+    int newInterval = intervals[currentStage < intervals.length ? currentStage : intervals.length - 1];
+    // Увеличиваем стадию повторения после выбора интервала
+    int newStage = currentStage + 1;
+
+    // Используем текущую дату повторения как основу
+    DateTime nextReview = word.nextReview.add(Duration(days: newInterval));
+
+    print('Updating review: original=${word.original}, currentStage=$currentStage, newStage=$newStage, newInterval=$newInterval days, nextReview=$nextReview');
 
     final updatedWord = Word(
       original: word.original,
       translation: word.translation,
       interval: newInterval,
       reviewStage: newStage,
-      nextReview: DateTime.now().add(Duration(days: newInterval)),
+      reviewCount: word.reviewCount + 1,
+      nextReview: nextReview,
       isFamiliar: word.isFamiliar,
     );
 
@@ -58,11 +68,24 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       translation: word.translation,
       interval: word.interval,
       reviewStage: word.reviewStage,
+      reviewCount: word.reviewCount,
       nextReview: word.nextReview,
       isFamiliar: true,
     );
     _repository.updateWord(updatedWord);
     _nextCard();
+  }
+
+  void _nextCard() {
+    setState(() {
+      if (_currentIndex < _wordsForReview.length - 1) {
+        _currentIndex++;
+        _showTranslation = false;
+        _nextReviewDate = null;
+      } else {
+        _wordsForReview = [];
+      }
+    });
   }
 
   @override
@@ -106,41 +129,23 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
             ),
             if (_showTranslation) ...[
               SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      _updateReview(currentWord); // Повторить
-                      _nextCard();
-                    },
-                    child: Text('Повторить'),
-                  ),
-                  SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: () {
-                      _markAsFamiliar(currentWord); // Выучено
-                    },
-                    child: Text('Выучено'),
-                  ),
-                ],
+              ElevatedButton(
+                onPressed: () => _markAsFamiliar(currentWord),
+                child: Text('Выучено'),
               ),
             ],
           ],
         ),
       ),
+      floatingActionButton: _showTranslation
+          ? FloatingActionButton(
+        onPressed: () {
+          _updateReview(currentWord);
+          _nextCard();
+        },
+        child: Text('Далее'),
+      )
+          : null,
     );
-  }
-
-  void _nextCard() {
-    setState(() {
-      if (_currentIndex < _wordsForReview.length - 1) {
-        _currentIndex++;
-        _showTranslation = false;
-        _nextReviewDate = null;
-      } else {
-        _wordsForReview = [];
-      }
-    });
   }
 }

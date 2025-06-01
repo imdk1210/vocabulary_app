@@ -18,12 +18,14 @@ class WordRepository {
   Future<void> addWord(Word word) async {
     final prefs = await SharedPreferences.getInstance();
     final words = await getWords();
+    final now = DateTime.now();
     words.add(Word(
       original: word.original,
       translation: word.translation,
       interval: 1,
       reviewStage: 0,
-      nextReview: DateTime.now(),
+      reviewCount: 0,
+      nextReview: DateTime(now.year, now.month, now.day), // Начало текущего дня
       isFamiliar: false,
     ));
     final wordsJson = words.map((word) => jsonEncode(word.toJson())).toList();
@@ -51,24 +53,34 @@ class WordRepository {
     await prefs.setStringList(_wordsKey, wordsJson);
   }
 
-  // Получение слов для повторения (дата повторения <= текущей даты, не выученные)
+  // Получение слов для повторения (дата повторения <= текущей даты с учетом смещения)
   Future<List<Word>> getWordsForReview() async {
+    final prefs = await SharedPreferences.getInstance();
+    final offsetHours = prefs.getInt('time_offset_hours') ?? 0;
+    final offset = Duration(hours: offsetHours);
     final words = await getWords();
-    final now = DateTime.now();
-    return words.where((word) => !word.isFamiliar && word.nextReview.isBefore(now)).toList();
+    final now = DateTime.now().add(offset);
+    // Нормализуем текущую дату к началу дня
+    final today = DateTime(now.year, now.month, now.day);
+    return words.where((word) => !word.isFamiliar && word.nextReview.isBefore(today) || word.nextReview.isAtSameMomentAs(today)).toList();
   }
 
   // Принудительное добавление слова для повторения
   Future<void> addWordForReview(String original) async {
+    final prefs = await SharedPreferences.getInstance();
+    final offsetHours = prefs.getInt('time_offset_hours') ?? 0;
+    final offset = Duration(hours: offsetHours);
     final words = await getWords();
     final index = words.indexWhere((word) => word.original == original);
     if (index != -1) {
+      final now = DateTime.now().add(offset);
       final updatedWord = Word(
         original: words[index].original,
         translation: words[index].translation,
         interval: words[index].interval,
         reviewStage: words[index].reviewStage,
-        nextReview: DateTime.now(), // Установить немедленное повторение
+        reviewCount: words[index].reviewCount,
+        nextReview: DateTime(now.year, now.month, now.day),
         isFamiliar: words[index].isFamiliar,
       );
       await updateWord(updatedWord);

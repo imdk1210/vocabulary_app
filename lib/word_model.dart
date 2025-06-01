@@ -3,6 +3,7 @@ class Word {
   final String translation;
   int interval; // Интервал повторения в днях
   int reviewStage; // Стадия повторения (0: новый, 1: 1 день, 2: 3 дня, и т.д.)
+  int reviewCount; // Количество повторений
   DateTime nextReview; // Дата следующего повторения
   bool isFamiliar; // Флаг, указывающий, что слово выучено
 
@@ -11,6 +12,7 @@ class Word {
     required this.translation,
     this.interval = 1,
     this.reviewStage = 0,
+    this.reviewCount = 0,
     required this.nextReview,
     this.isFamiliar = false,
   });
@@ -22,6 +24,7 @@ class Word {
       'translation': translation,
       'interval': interval,
       'reviewStage': reviewStage,
+      'reviewCount': reviewCount,
       'nextReview': nextReview.toIso8601String(),
       'isFamiliar': isFamiliar,
     };
@@ -34,6 +37,7 @@ class Word {
       translation: json['translation'],
       interval: json['interval'],
       reviewStage: json['reviewStage'] ?? 0,
+      reviewCount: json['reviewCount'] ?? 0,
       nextReview: DateTime.parse(json['nextReview']),
       isFamiliar: json['isFamiliar'] ?? false,
     );

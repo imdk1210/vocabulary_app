@@ -56,12 +56,14 @@ class _AddWordScreenState extends State<AddWordScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
+                    final now = DateTime.now();
                     final word = Word(
                       original: _originalController.text,
                       translation: _translationController.text,
                       interval: 1,
                       reviewStage: 0,
-                      nextReview: DateTime.now(),
+                      reviewCount: 0,
+                      nextReview: DateTime(now.year, now.month, now.day),
                       isFamiliar: false,
                     );
                     await _repository.addWord(word);
